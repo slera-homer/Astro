@@ -1,0 +1,90 @@
+//El skecth de arduino es para un inclinómetro en grados enteros con display TM1637, no incluye minutos, sólo grados pero suficiente para aproximación
+//Los componentes los encapsulo en una carcasa diseñada en 3d y se coloca en el lomo del tubo del telescopio
+//Lleva un potenciómetro para calibrarlo
+//El proceso es:
+//Apuntar a la estrella polar centrándola en el ocular
+//Verificar en stelarium etc grados a las que se encuentre en ese momento, oscila entre 38-40
+//Ajustar con el potenciómetro y listo
+
+
+#include <I2Cdev.h>
+#include <MPU6050.h>
+#include <Wire.h>
+#include <TM1637Display.h>
+
+const int mpuAddress = 0x68;  // Puede ser 0x68 o 0x69
+MPU6050 mpu(mpuAddress);
+
+int ax, ay, az;
+int gx, gy, gz;
+
+// Pin 2 se utiliza para la comunicación con el display TM1637
+// Pin 3 se utiliza para la comunicación con el display TM1637
+TM1637Display display(2, 3);
+
+// El pin analógico al que está conectado el potenciómetro
+const int pinPotenciometro = A0;
+
+void setup()
+{
+  // Inicializa el monitor serie
+  Serial.begin(9600);
+
+  // Inicializa la comunicación I2C
+  Wire.begin();
+
+  // Inicializa el sensor MPU6050
+  mpu.initialize();
+
+  // Muestra un mensaje en el monitor serie si el sensor se inicializó correctamente
+  Serial.println(mpu.testConnection() ? F("IMU iniciado correctamente") : F("Error al iniciar IMU"));
+
+  // Establece el brillo del display, es entre 8 min y 15 max
+  display.setBrightness(8);
+}
+
+void loop()
+{
+  // Leer las aceleraciones
+  mpu.getAcceleration(&ax, &ay, &az);
+
+  //Calcular los angulos de inclinacion
+
+  float accel_ang_y = atan2(ay, sqrt(pow(ax, 2) + pow(az, 2)));
+
+  // Convertir el ángulo de inclinación a un número entero
+  int angle_y = round(accel_ang_y * 180 / PI);
+
+  // Mapear el valor del potenciómetro entre -5 y +5 grados para ajustarse a la estrella polar
+  int valorMapeado = (analogRead(pinPotenciometro) / 512.0) * 5.1 - 5.0;
+
+  // Calcular el valor total
+  int valorTotal = angle_y + valorMapeado;
+
+  // Mostrar el ángulo de inclinación
+  showNumberInt(valorTotal);
+
+  // Espera 1 segundo
+  delay(200);
+
+  Serial.print("Valor real de la inclinación: ");
+  Serial.println(angle_y);
+  Serial.print("Valor corregido de la inclinación: ");
+  Serial.println(valorTotal);
+  // Espera 1 segundo
+  delay(1);
+}
+
+void showNumberInt(int number)
+{
+  // Convertir el número a una cadena de caracteres
+  char buffer[5];
+  itoa(number, buffer, 10);
+
+  // Crear un nuevo buffer para incluir '-A' al final, es el valor de la Altitud del objeto astronómico con respecto a la horizontal
+  char displayBuffer[7]; // Tamaño 7 para acomodar el número y '-E'
+  snprintf(displayBuffer, 7, "%s-A", buffer);
+
+  // Mostrar la cadena de caracteres en el display
+  display.showString(displayBuffer);
+}
